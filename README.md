@@ -22,13 +22,7 @@ chmod +x automation.sh
 
 ```bash
 # プロジェクト分析とISSUE作成
-./automation.sh issue_analysis
-
-# PR #123 をレビュー
-./automation.sh pr_review 123
-
-# ISSUE #456 を実装
-./automation.sh implementation 456
+./automation.sh issue_creater
 
 # カスタムプロンプトを実行
 ./automation.sh my_prompt.txt
@@ -43,9 +37,7 @@ chmod +x automation.sh
 
 `prompts/`ディレクトリに以下のテンプレートが含まれています：
 
-- `issue_analysis.txt` - プロジェクト分析と ISSUE 作成
-- `pr_review.txt` - プルリクエストのレビュー（{{ARG1}} = PR番号）
-- `implementation.txt` - ISSUE の実装（{{ARG1}} = ISSUE番号）
+- `issue_creater.txt` - プロジェクト分析と ISSUE 作成
 - `custom_example.txt` - カスタムプロンプトの例
 
 ### 変数の置換
@@ -73,16 +65,16 @@ echo "プロジェクトのテストを実行してレポートを生成して�
 ./cron_examples.sh
 
 # 例: 毎日朝9時にプロジェクト分析
-0 9 * * * cd /path/to/project && ./automation.sh issue_analysis >> ./claude.log 2>&1
+0 9 * * * cd /path/to/project && ./automation.sh issue_creater >> ./claude_developer.log 2>&1
 
 # 例: 毎時プロンプトを実行
-0 * * * * cd /path/to/project && ./automation.sh my_hourly_task >> ./claude.log 2>&1
+0 * * * * cd /path/to/project && ./automation.sh my_hourly_task >> ./claude_developer.log 2>&1
 ```
 
 ## 環境変数
 
 - `PROJECT_PATH` - プロジェクトパス（デフォルト: カレントディレクトリ）
-- `LOG_FILE` - ログファイルパス（デフォルト: ./claude_simple.log）
+- `LOG_FILE` - ログファイルパス（デフォルト: ./claude_developer.log）
 - `PROMPTS_DIR` - プロンプトディレクトリ（デフォルト: ./prompts）
 
 ## 必要な環境

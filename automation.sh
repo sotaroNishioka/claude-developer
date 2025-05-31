@@ -8,7 +8,7 @@ set -e
 
 # 設定
 PROJECT_PATH="${PROJECT_PATH:-$(pwd)}"
-LOG_FILE="${LOG_FILE:-./claude_simple.log}"
+LOG_FILE="${LOG_FILE:-./claude_developer.log}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROMPTS_DIR="${PROMPTS_DIR:-$SCRIPT_DIR/prompts}"
 
