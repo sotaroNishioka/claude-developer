@@ -126,7 +126,140 @@ logs/
 - git
 - bash
 
-## 🔧 ワークフロー整合性改善 [NEW]
+## 📋 プロンプトワークフロー図
+
+### 全体ワークフロー
+
+```mermaid
+graph TD
+    %% 人間からの入力
+    HumanRequest[👤 Human Request] --> RequestIssue[📝 Request Issue]
+    NewIssue[🆕 New Issue] --> IssueTriager
+
+    %% Issue処理フロー  
+    RequestIssue --> IssueImprover[🔧 Issue Improver]
+    IssueTriager[🏷️ Issue Triager] --> |status:ready| Implementer[⚡ Implementer]
+    IssueImprover --> |status:ready| Implementer
+    
+    %% 実装・レビューサイクル
+    Implementer --> |status:pr-created| PRReviewer[👀 PR Reviewer]
+    PRReviewer --> |status:approved| Completed[✅ Completed]
+    PRReviewer --> |status:changes-requested| PRResponder[🔄 PR Responder]
+    PRResponder --> |status:re-reviewing| PRReviewer
+    
+    %% CI/CD監視フロー
+    CICDFailure[🚨 CI/CD Failure] --> CICDMonitor[📊 CI/CD Monitor]
+    CICDMonitor --> |Emergency Issue| IssueTriager
+    
+    %% 品質・分析支援フロー
+    QAStrategist[🧪 QA Strategist] --> |Test Issues| IssueTriager
+    CodebaseAnalyzer[🔍 Codebase Analyzer] --> |Improvement Issues| IssueTriager
+    DocumentationManager[📚 Documentation Manager] --> |Doc Issues| IssueTriager
+    
+    %% スタイル設定
+    classDef human fill:#e1f5fe,stroke:#01579b,stroke-width:2px,color:#000
+    classDef primary fill:#f3e5f5,stroke:#4a148c,stroke-width:2px,color:#000
+    classDef support fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#000
+    classDef monitor fill:#ffebee,stroke:#b71c1c,stroke-width:2px,color:#000
+    classDef status fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px,color:#000
+    
+    class HumanRequest,RequestIssue,NewIssue human
+    class IssueTriager,IssueImprover,Implementer,PRReviewer,PRResponder primary
+    class QAStrategist,CodebaseAnalyzer,DocumentationManager support
+    class CICDMonitor,CICDFailure monitor
+    class Completed status
+```
+
+### ステータス遷移図
+
+```mermaid
+stateDiagram-v2
+    [*] --> request : 人間のリクエスト
+    request --> analyzing : Issue Improver開始
+    analyzing --> ready : 分析完了
+    ready --> implementing : Implementer開始
+    implementing --> pr_created : PR作成完了
+    pr_created --> reviewing : PR Reviewer開始
+    reviewing --> approved : レビュー承認
+    reviewing --> changes_requested : 修正要求
+    changes_requested --> fixing : PR Responder開始
+    fixing --> fix_completed : 修正完了
+    fix_completed --> re_reviewing : 再レビュー待ち
+    re_reviewing --> reviewing : 再レビュー開始
+    approved --> completed : マージ完了
+    completed --> [*]
+    
+    note right of changes_requested : [MUST FIX]<br/>[SHOULD FIX]<br/>[CONSIDER]
+    note right of re_reviewing : 無限ループ防止<br/>明確な状態分離
+```
+
+### Worker排他制御とラベル管理
+
+```mermaid
+graph LR
+    subgraph "Priority Labels"
+        P1[priority:critical]
+        P2[priority:high]
+        P3[priority:medium]
+        P4[priority:low]
+    end
+    
+    subgraph "Type Labels"
+        T1[type:bug]
+        T2[type:feature]
+        T3[type:enhancement]
+        T4[type:documentation]
+    end
+    
+    subgraph "Worker Labels"
+        W1[worker:issue-triager]
+        W2[worker:issue-improver]
+        W3[worker:implementer]
+        W4[worker:pr-reviewer]
+        W5[worker:pr-responder]
+        W6[worker:cicd-monitor]
+    end
+    
+    subgraph "Status Labels"
+        S1[status:request]
+        S2[status:analyzing]
+        S3[status:ready]
+        S4[status:implementing]
+        S5[status:pr-created]
+        S6[status:reviewing]
+        S7[status:approved]
+        S8[status:changes-requested]
+        S9[status:fixing]
+        S10[status:re-reviewing]
+        S11[status:completed]
+    end
+    
+    classDef priority fill:#ffcdd2
+    classDef type fill:#c8e6c9
+    classDef worker fill:#fff9c4
+    classDef status fill:#e1f5fe
+    
+    class P1,P2,P3,P4 priority
+    class T1,T2,T3,T4 type
+    class W1,W2,W3,W4,W5,W6 worker
+    class S1,S2,S3,S4,S5,S6,S7,S8,S9,S10,S11 status
+```
+
+## 🔧 ワークフロー整合性改善
+
+### プロンプトファイル詳細
+
+| プロンプト | 役割 | 入力条件 | 出力ステータス |
+|-----------|-----|----------|---------------|
+| **Issue Triager** | 新規ISSUE分析・分類 | ラベル未設定ISSUE | `status:ready` |
+| **Issue Improver** | リクエストの詳細化 | `status:request` | `status:ready` |
+| **Implementer** | 実装とPR作成 | `status:ready` | `status:pr-created` |
+| **PR Reviewer** | PRレビュー実行 | `status:pr-created`<br/>`status:re-reviewing` | `status:approved`<br/>`status:changes-requested` |
+| **PR Responder** | レビュー修正対応 | `status:changes-requested` | `status:re-reviewing` |
+| **CI/CD Monitor** | CI/CD失敗監視 | ワークフロー失敗検出 | 緊急ISSUE作成 |
+| **QA Strategist** | テスト戦略分析 | 独立実行 | テスト改善ISSUE |
+| **Codebase Analyzer** | コード品質分析 | 独立実行 | 改善ISSUE作成 |
+| **Documentation Manager** | ドキュメント管理 | 独立実行 | ドキュメントISSUE |
 
 ### 主要改善点
 
@@ -144,20 +277,6 @@ logs/
 - **統合フロー**: CI/CD Monitor によるISSUE作成を既存ワークフローに統合
 - **統一ラベル**: `priority:critical` + `worker:cicd-monitor` の組み合わせ
 - **緊急度統一**: 全プロンプト間での緊急度判定基準統一
-
-### 改善されたワークフロー
-
-```
-人間のリクエスト → Issue Improver → Implementer → PR作成
-    ↓
-PR Reviewer → approved/changes-requested
-    ↓
-changes-requested → PR Responder → fix-completed
-    ↓
-re-reviewing → PR Reviewer (再度) → approved
-    ↓
-マージ → completed
-```
 
 ### エラーハンドリング強化
 - **デッドロック防止**: 異常状態の自動検出と復旧
