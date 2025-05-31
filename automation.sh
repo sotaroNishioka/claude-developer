@@ -19,6 +19,9 @@ PROJECT_PATH="${PROJECT_PATH:-$(pwd)}"
 LOG_DIR="${LOG_DIR:-$SCRIPT_DIR/logs}"
 PROMPTS_DIR="${PROMPTS_DIR:-$SCRIPT_DIR/prompts}"
 
+# Claude Codeのパス設定（Cron実行対応）
+CLAUDE_CMD="${CLAUDE_CMD:-claude}"
+
 # ログディレクトリ作成
 mkdir -p "$LOG_DIR"
 
@@ -66,7 +69,7 @@ execute_prompt() {
     done
     
     # Claude実行（自動実行モード）
-    echo "2" | claude --dangerously-skip-permissions "$prompt" 2>&1 | tee "$main_log_file"
+    echo "2" | "$CLAUDE_CMD" --dangerously-skip-permissions "$prompt" 2>&1 | tee "$main_log_file"
     
     log "実行完了"
 }
@@ -74,8 +77,8 @@ execute_prompt() {
 # メイン処理
 main() {
     # 前提条件チェック
-    if ! command -v claude &> /dev/null; then
-        echo "ERROR: Claude Code CLIが見つかりません"
+    if [ ! -f "$CLAUDE_CMD" ] && ! command -v claude &> /dev/null; then
+        echo "ERROR: Claude Code CLIが見つかりません: $CLAUDE_CMD"
         exit 1
     fi
     
