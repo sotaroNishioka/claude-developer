@@ -68,8 +68,8 @@ execute_prompt() {
         i=$((i + 1))
     done
     
-    # Claude実行（自動実行モード）
-    echo "2" | "$CLAUDE_CMD" --dangerously-skip-permissions "$prompt" 2>&1 | tee "$main_log_file"
+    # Claude実行（非対話的モード）
+    "$CLAUDE_CMD" --print --dangerously-skip-permissions "$prompt" 2>&1 | tee "$main_log_file"
     
     log "実行完了"
 }
