@@ -2,21 +2,7 @@
 
 ## 📋 概要
 
-このシステムは9つの専門プロンプトが1時間ごとに独立実行されることで、GitHub上での開発プロセス全体を自動化します。各プロンプトはステートレスで動作し、ISSUEラベルとコメントによるステータス管理により重複作業を防止します。
-
-## 🕐 実行スケジュール
-
-```
-毎時00分: Issue Improver
-毎時07分: Implementer  
-毎時14分: PR Reviewer
-毎時21分: PR Responder
-毎時28分: Issue Triager
-毎時35分: CI/CD Monitor
-毎時42分: Codebase Analyzer
-毎時49分: QA Strategist
-毎時56分: Documentation Manager
-```
+このシステムは9つの専門プロンプトが独立実行されることで、GitHub上での開発プロセス全体を自動化します。各プロンプトはステートレスで動作し、ISSUEラベルとコメントによるステータス管理により重複作業を防止します。
 
 ## 🔄 メインワークフロー
 
@@ -25,15 +11,15 @@
 [人間] → ISSUE作成 + label:request
 ```
 
-### 2. Issue Improver (毎時00分)
+### 2. Issue Improver
 ```
 Input:  label:request + is:open
-Check:  24h以内の重複作業確認
+Check:  重複作業・既存処理確認
 Action: request → formal ISSUE変換
 Output: status:ready + 新ISSUE作成 + request ISSUE close
 ```
 
-### 3. Implementer (毎時07分)  
+### 3. Implementer
 ```
 Input:  status:ready
 Check:  既存PR存在確認 + 重複実装防止
@@ -41,10 +27,10 @@ Action: コード実装 + テスト作成 + PR作成
 Output: status:pr-created + PR #XXX
 ```
 
-### 4. PR Reviewer (毎時14分)
+### 4. PR Reviewer
 ```
 Input:  status:pr-created
-Check:  24h以内のレビュー重複確認
+Check:  レビュー重複確認
 Action: 多角的PR評価 + コメント投稿
 Output: status:approved OR status:changes-requested
 ```
@@ -101,9 +87,9 @@ worker:documentation-manager
 
 ## 🔒 重複防止メカニズム
 
-### 時間ベース制御
-- 同一作業者による24時間以内の重複作業を防止
-- コメントのタイムスタンプで最後の作業時刻を確認
+### 処理状態ベース制御
+- 既に処理が完了している作業の重複実行を防止
+- コメントの内容で最後の作業状況を確認
 
 ### ステータスベース制御
 - 進行中ステータス（`implementing`, `reviewing`, `fixing`）がある場合は処理スキップ
@@ -115,35 +101,35 @@ worker:documentation-manager
 
 ## 🔄 サポートワークフロー
 
-### Issue Triager (毎時28分)
+### Issue Triager
 ```
 Input:  新規作成されたISSUE（ラベルなし）
 Action: 優先度・分類・工数見積もり
 Output: priority/type/complexity ラベル付与
 ```
 
-### CI/CD Monitor (毎時35分)
+### CI/CD Monitor
 ```
 Input:  ワークフロー失敗検出
 Action: 原因分析 + 対応ISSUE作成
 Output: 障害対応ISSUE + 緊急通知
 ```
 
-### Codebase Analyzer (毎時42分)
+### Codebase Analyzer
 ```
 Input:  プロジェクトファイル分析
 Action: 技術的負債・改善機会の特定
 Output: 改善提案ISSUE作成
 ```
 
-### QA Strategist (毎時49分)  
+### QA Strategist
 ```
 Input:  テストファイル・カバレッジ分析
 Action: テスト戦略改善提案
 Output: テスト改善ISSUE作成
 ```
 
-### Documentation Manager (毎時56分)
+### Documentation Manager
 ```
 Input:  ドキュメントファイル分析
 Action: 文書の正確性・最新性確認 + CLAUDE.md同期
@@ -183,7 +169,7 @@ ISSUE #123:
 
 ### 人間による介入ポイント
 - `status:blocked` ラベルが付いたISSUE
-- `status:under-discussion` で24時間以上議論継続
+- `status:under-discussion` で議論が長期継続
 - CI/CD障害で自動修復不可能な問題
 - 最終的なPRマージ判断
 
@@ -213,4 +199,23 @@ ISSUE #123:
 - レビュー時間: pr-created → approved
 - 修正時間: changes-requested → fix-completed
 
-これにより、人間の創造的作業に集中できる包括的な開発自動化システムが実現されます。
+## 🎯 実行タイミングの柔軟性
+
+各プロンプトは以下の特徴を持ちます：
+
+### 独立性
+- 各プロンプトは独立して実行可能
+- 前回の実行状態に依存しない設計
+- ステータス駆動による適切な処理順序
+
+### 柔軟なスケジューリング
+- 任意のタイミングで実行可能
+- 負荷に応じた実行頻度調整
+- 緊急時の優先度制御
+
+### 重複安全性
+- 同一作業の重複実行を自動回避
+- ステータス確認による安全な処理
+- エラー時の適切な状態復旧
+
+これにより、人間の創造的作業に集中できる包括的で柔軟な開発自動化システムが実現されます。
