@@ -48,7 +48,7 @@ execute_prompt() {
     done
     
     # Claude実行
-    claude "$prompt"
+    claude --dangerously-skip-permissions "$prompt"
     
     log "実行完了"
 }
