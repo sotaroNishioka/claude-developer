@@ -1,0 +1,216 @@
+# Claude Developer 自動化システム ワークフロー
+
+## 📋 概要
+
+このシステムは9つの専門プロンプトが1時間ごとに独立実行されることで、GitHub上での開発プロセス全体を自動化します。各プロンプトはステートレスで動作し、ISSUEラベルとコメントによるステータス管理により重複作業を防止します。
+
+## 🕐 実行スケジュール
+
+```
+毎時00分: Issue Improver
+毎時07分: Implementer  
+毎時14分: PR Reviewer
+毎時21分: PR Responder
+毎時28分: Issue Triager
+毎時35分: CI/CD Monitor
+毎時42分: Codebase Analyzer
+毎時49分: QA Strategist
+毎時56分: Documentation Manager
+```
+
+## 🔄 メインワークフロー
+
+### 1. 人間によるリクエスト作成
+```
+[人間] → ISSUE作成 + label:request
+```
+
+### 2. Issue Improver (毎時00分)
+```
+Input:  label:request + is:open
+Check:  24h以内の重複作業確認
+Action: request → formal ISSUE変換
+Output: status:ready + 新ISSUE作成 + request ISSUE close
+```
+
+### 3. Implementer (毎時07分)  
+```
+Input:  status:ready
+Check:  既存PR存在確認 + 重複実装防止
+Action: コード実装 + テスト作成 + PR作成
+Output: status:pr-created + PR #XXX
+```
+
+### 4. PR Reviewer (毎時14分)
+```
+Input:  status:pr-created
+Check:  24h以内のレビュー重複確認
+Action: 多角的PR評価 + コメント投稿
+Output: status:approved OR status:changes-requested
+```
+
+### 5A. マージパス (APPROVED)
+```
+status:approved → [人間によるマージ] → status:completed
+```
+
+### 5B. 修正パス (CHANGES_REQUESTED)
+```
+Input:  status:changes-requested
+Check:  [MUST FIX]/[SHOULD FIX]コメント存在確認
+Action: 修正実装 + コメント返信 + re-request review
+Output: status:fix-completed → PR Reviewer に戻る
+```
+
+## 🏷️ ステータスラベル体系
+
+### メインフロー
+```
+status:request          # 人間からのリクエスト（初期）
+status:analyzing        # Issue Improver 分析中
+status:ready           # 実装準備完了
+status:implementing    # Implementer 実装中
+status:pr-created      # PR作成済み
+status:reviewing       # PR Reviewer レビュー中
+status:approved        # レビュー承認済み
+status:changes-requested # 修正要求
+status:fixing          # PR Responder 修正中
+status:fix-completed   # 修正完了（再レビュー待ち）
+status:completed       # 完了
+```
+
+### サブフロー
+```
+status:under-discussion # レビューで議論継続
+status:blocked         # 外部要因でブロック
+status:on-hold         # 一時停止
+```
+
+### 作業者識別
+```
+worker:issue-improver
+worker:implementer
+worker:pr-reviewer
+worker:pr-responder
+worker:issue-triager
+worker:cicd-monitor
+worker:codebase-analyzer
+worker:qa-strategist
+worker:documentation-manager
+```
+
+## 🔒 重複防止メカニズム
+
+### 時間ベース制御
+- 同一作業者による24時間以内の重複作業を防止
+- コメントのタイムスタンプで最後の作業時刻を確認
+
+### ステータスベース制御
+- 進行中ステータス（`implementing`, `reviewing`, `fixing`）がある場合は処理スキップ
+- 完了ステータス（`completed`）の場合は処理スキップ
+
+### リソースベース制御
+- 既存PR確認による重複実装防止
+- 既存ブランチ確認による競合回避
+
+## 🔄 サポートワークフロー
+
+### Issue Triager (毎時28分)
+```
+Input:  新規作成されたISSUE（ラベルなし）
+Action: 優先度・分類・工数見積もり
+Output: priority/type/complexity ラベル付与
+```
+
+### CI/CD Monitor (毎時35分)
+```
+Input:  ワークフロー失敗検出
+Action: 原因分析 + 対応ISSUE作成
+Output: 障害対応ISSUE + 緊急通知
+```
+
+### Codebase Analyzer (毎時42分)
+```
+Input:  プロジェクトファイル分析
+Action: 技術的負債・改善機会の特定
+Output: 改善提案ISSUE作成
+```
+
+### QA Strategist (毎時49分)  
+```
+Input:  テストファイル・カバレッジ分析
+Action: テスト戦略改善提案
+Output: テスト改善ISSUE作成
+```
+
+### Documentation Manager (毎時56分)
+```
+Input:  ドキュメントファイル分析
+Action: 文書の正確性・最新性確認 + CLAUDE.md同期
+Output: ドキュメント改善 + 直接更新
+```
+
+## 📊 ステータス確認方法
+
+### ISSUEコメント例
+```
+🤖 **Implementer Status Update**
+**Timestamp**: 2025-05-31 13:21:32 UTC
+**Status**: READY → IMPLEMENTING  
+**Action**: Started implementation
+**Branch**: feature/issue-123-user-auth
+**PR**: Will be created upon completion
+**Estimated Completion**: 2 hours
+**Blocking**: None
+```
+
+### ラベル組み合わせ例
+```
+ISSUE #123:
+- status:implementing
+- worker:implementer  
+- priority:high
+- type:feature
+- complexity:medium
+```
+
+## 🚨 エラー対応
+
+### 失敗時の状態復旧
+- 作業開始時にステータス更新、失敗時は元に戻す
+- エラー詳細をコメントで記録
+- 手動介入が必要な場合は `status:blocked` に設定
+
+### 人間による介入ポイント
+- `status:blocked` ラベルが付いたISSUE
+- `status:under-discussion` で24時間以上議論継続
+- CI/CD障害で自動修復不可能な問題
+- 最終的なPRマージ判断
+
+## 📈 品質保証
+
+### 各段階での品質チェック
+- **Issue Improver**: 要件の明確性・実装可能性
+- **Implementer**: セキュリティ・パフォーマンス・テスト
+- **PR Reviewer**: 多角的品質評価・ベストプラクティス確認
+- **PR Responder**: 指摘事項の適切な修正
+
+### 自動化範囲と人間の役割
+- **自動化**: 実装・レビュー・修正・文書化
+- **人間**: 要件定義・最終判断・マージ・緊急対応
+
+## 🔧 システム監視
+
+### ヘルスチェック項目
+- 各プロンプトの実行成功率
+- ステータス遷移の正常性  
+- 滞留ISSUEの検出
+- 重複作業の発生有無
+
+### パフォーマンス指標
+- リードタイム: request → completed
+- サイクルタイム: ready → pr-created  
+- レビュー時間: pr-created → approved
+- 修正時間: changes-requested → fix-completed
+
+これにより、人間の創造的作業に集中できる包括的な開発自動化システムが実現されます。
