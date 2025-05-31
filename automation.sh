@@ -9,7 +9,6 @@ set -e
 # 設定
 PROJECT_PATH="${PROJECT_PATH:-$(pwd)}"
 LOG_FILE="${LOG_FILE:-./claude_simple.log}"
-DRY_RUN="${DRY_RUN:-false}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROMPTS_DIR="${PROMPTS_DIR:-$SCRIPT_DIR/prompts}"
 
@@ -51,12 +50,8 @@ create_issues() {
             local body=$(echo "$issue" | jq -r '.body')
             local priority=$(echo "$issue" | jq -r '.priority')
             
-            if [ "$DRY_RUN" = "true" ]; then
-                log "DRY RUN: ISSUE作成予定 - $title"
-            else
-                gh issue create --title "$title" --body "$body" --label "auto-generated,priority:$priority"
-                log "ISSUE作成完了 - $title"
-            fi
+            gh issue create --title "$title" --body "$body" --label "auto-generated,priority:$priority"
+            log "ISSUE作成完了 - $title"
         done
     else
         log "ERROR: Claude分析失敗"
@@ -74,14 +69,10 @@ review_prs() {
     for pr in $prs; do
         log "PR #$pr をレビュー中..."
         
-        if [ "$DRY_RUN" = "true" ]; then
-            log "DRY RUN: PR #$pr のレビュー予定"
-        else
-            local prompt_template=$(load_prompt "pr_review")
-            local prompt=$(echo "$prompt_template" | sed "s/{{PR_NUMBER}}/$pr/g")
-            claude "$prompt"
-            log "PR #$pr レビュー完了"
-        fi
+        local prompt_template=$(load_prompt "pr_review")
+        local prompt=$(echo "$prompt_template" | sed "s/{{PR_NUMBER}}/$pr/g")
+        claude "$prompt"
+        log "PR #$pr レビュー完了"
     done
     
     log "=== PRレビュー完了 ==="
@@ -101,32 +92,28 @@ implement_issue() {
     # ブランチ作成
     local branch_name="fix/issue-${issue_number}"
     
-    if [ "$DRY_RUN" = "true" ]; then
-        log "DRY RUN: ブランチ $branch_name で実装予定"
-    else
-        git checkout -b "$branch_name" 2>/dev/null || git checkout "$branch_name"
-        
-        # プロンプト生成
-        local prompt_template=$(load_prompt "implementation")
-        local prompt=$(echo "$prompt_template" | \
-            sed "s/{{ISSUE_NUMBER}}/$issue_number/g" | \
-            sed "s/{{ISSUE_TITLE}}/$title/g" | \
-            sed "s/{{ISSUE_BODY}}/$body/g")
-        
-        # 実装実行
-        claude "$prompt"
-        
-        # 変更があればPR作成
-        if ! git diff --quiet; then
-            git push -u origin "$branch_name"
-            gh pr create --title "fix: implement #$issue_number - $title" \
-                        --body "Closes #$issue_number" \
-                        --base main
-            log "PR作成完了"
-        fi
-        
-        git checkout main
+    git checkout -b "$branch_name" 2>/dev/null || git checkout "$branch_name"
+    
+    # プロンプト生成
+    local prompt_template=$(load_prompt "implementation")
+    local prompt=$(echo "$prompt_template" | \
+        sed "s/{{ISSUE_NUMBER}}/$issue_number/g" | \
+        sed "s/{{ISSUE_TITLE}}/$title/g" | \
+        sed "s/{{ISSUE_BODY}}/$body/g")
+    
+    # 実装実行
+    claude "$prompt"
+    
+    # 変更があればPR作成
+    if ! git diff --quiet; then
+        git push -u origin "$branch_name"
+        gh pr create --title "fix: implement #$issue_number - $title" \
+                    --body "Closes #$issue_number" \
+                    --base main
+        log "PR作成完了"
     fi
+    
+    git checkout main
     
     log "=== ISSUE #$issue_number 実装完了 ==="
 }
@@ -197,7 +184,6 @@ main() {
 
 環境変数:
   PROJECT_PATH        - プロジェクトパス (デフォルト: カレントディレクトリ)
-  DRY_RUN            - ドライラン (true/false)
   PROMPTS_DIR        - プロンプトテンプレートのディレクトリ
 
 例:
@@ -205,7 +191,6 @@ main() {
   $0 review                    # PRレビューのみ
   $0 implement 123             # ISSUE #123を実装
   $0 run my_prompt.txt         # カスタムプロンプトを実行
-  DRY_RUN=true $0 all         # ドライランで全処理確認
 EOF
             exit 0
             ;;

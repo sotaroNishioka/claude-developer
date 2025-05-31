@@ -66,7 +66,6 @@ cp config.env config.env
 ## 環境変数
 
 - `PROJECT_PATH` - プロジェクトパス（デフォルト: カレントディレクトリ）
-- `DRY_RUN` - ドライラン実行（デフォルト: false）
 - `LOG_FILE` - ログファイルパス（デフォルト: ./claude_simple.log）
 - `PROMPTS_DIR` - プロンプトディレクトリ（デフォルト: ./prompts）
 
