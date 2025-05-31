@@ -65,8 +65,8 @@ execute_prompt() {
         i=$((i + 1))
     done
     
-    # Claude実行（詳細ログ出力付き）
-    claude --dangerously-skip-permissions "$prompt" 2>&1 | tee "$main_log_file"
+    # Claude実行（自動実行モード）
+    echo "2" | claude --dangerously-skip-permissions "$prompt" 2>&1 | tee "$main_log_file"
     
     log "実行完了"
 }
