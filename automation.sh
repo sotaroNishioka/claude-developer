@@ -6,10 +6,17 @@
 
 set -e
 
-# 設定
+# スクリプトディレクトリを最初に取得
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# .envファイルを読み込み
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    source "$SCRIPT_DIR/.env"
+fi
+
+# 設定（.env読み込み後にデフォルト値を設定）
 PROJECT_PATH="${PROJECT_PATH:-$(pwd)}"
 LOG_DIR="${LOG_DIR:-$SCRIPT_DIR/logs}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROMPTS_DIR="${PROMPTS_DIR:-$SCRIPT_DIR/prompts}"
 
 # ログディレクトリ作成
