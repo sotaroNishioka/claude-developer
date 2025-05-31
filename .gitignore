@@ -1,0 +1,46 @@
+# ログファイル
+*.log
+*.log.*
+
+# 設定ファイル（テンプレートではない実際の設定）
+config.env
+.env
+.env.local
+
+# 一時ファイル
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+
+# バックアップファイル
+*.bak
+*.backup
+*~
+
+# IDEとエディタ
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS固有
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# 実行時ファイル
+*.pid
+*.lock
+
+# クレデンシャル
+*.key
+*.pem
+*.crt
+auth_token
+.credentials
