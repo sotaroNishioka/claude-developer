@@ -1,8 +1,8 @@
 # Claude Developer 自動化システム ワークフロー
 
-## 📋 概要
+## 🚨 概要
 
-このシステムは9つの専門プロンプトが独立実行されることで、GitHub上での開発プロセス全体を自動化します。各プロンプトはステートレスで動作し、ISSUEラベルとコメントによるステータス管理により重複作業を防止します。
+このシステムは、4つの専門プロンプトが独立実行されることで、GitHub上での開発プロセス全体を自動化します。各プロンプトはステートレスで動作し、ISSUEラベルとコメントによるステータス管理により重複作業を防止します。
 
 ## 🔄 メインワークフロー
 
@@ -45,34 +45,35 @@ status:approved → [人間によるマージ] → status:completed
 Input:  status:changes-requested
 Check:  [MUST FIX]/[SHOULD FIX]コメント存在確認
 Action: 修正実装 + コメント返信 + re-request review
-Output: status:fix-completed → PR Reviewer に戻る
+Output: status:fix-completed → PR Reviewerに戻る
 ```
 
 ## 🏷️ ステータスラベル体系
 
 ### メインフロー
 ```
-status:request          # 人間からのリクエスト（初期）
+status:request          # 人間からのリクエスト（初期状態）
 status:analyzing        # Issue Improver 分析中
-status:ready           # 実装準備完了
-status:implementing    # Implementer 実装中
-status:pr-created      # PR作成済み
-status:reviewing       # PR Reviewer レビュー中
-status:approved        # レビュー承認済み
+status:ready            # 実装準備完了
+status:implementing     # Implementer 実装中
+status:pr-created       # PR作成済み
+status:reviewing        # PR Reviewer レビュー中
+status:re-reviewing     # 修正後の再レビュー中 [NEW]
+status:approved         # レビュー承認済み
 status:changes-requested # 修正要求
-status:fixing          # PR Responder 修正中
-status:fix-completed   # 修正完了（再レビュー待ち）
-status:completed       # 完了
+status:fixing           # PR Responder 修正中
+status:fix-completed    # 修正完了（再レビュー待ち）
+status:completed        # 完了
 ```
 
 ### サブフロー
 ```
 status:under-discussion # レビューで議論継続
-status:blocked         # 外部要因でブロック
-status:on-hold         # 一時停止
+status:blocked          # 外部要因でブロック
+status:on-hold          # 一時保留
 ```
 
-### 作業者識別
+### 作業者指定タグ
 ```
 worker:issue-improver
 worker:implementer
@@ -87,15 +88,15 @@ worker:documentation-manager
 
 ## 🔒 重複防止メカニズム
 
-### 処理状態ベース制御
+### 処理基準ベース判別
 - 既に処理が完了している作業の重複実行を防止
-- コメントの内容で最後の作業状況を確認
+- コメントの内容で最終作業状況を確認
 
-### ステータスベース制御
+### ステータスベース判別
 - 進行中ステータス（`implementing`, `reviewing`, `fixing`）がある場合は処理スキップ
 - 完了ステータス（`completed`）の場合は処理スキップ
 
-### リソースベース制御
+### リソースベース判別
 - 既存PR確認による重複実装防止
 - 既存ブランチ確認による競合回避
 
@@ -136,11 +137,11 @@ Action: 文書の正確性・最新性確認 + CLAUDE.md同期
 Output: ドキュメント改善 + 直接更新
 ```
 
-## 📊 ステータス確認方法
+## 📊 ステータス確認方針
 
-### ISSUEコメント例
+### ISSUEコメント依存
 ```
-🤖 **Implementer Status Update**
+📝 **Implementer Status Update**
 **Timestamp**: 2025-05-31 13:21:32 UTC
 **Status**: READY → IMPLEMENTING  
 **Action**: Started implementation
@@ -162,7 +163,7 @@ ISSUE #123:
 
 ## 🚨 エラー対応
 
-### 失敗時の状態復旧
+### 失敗時の状況復旧
 - 作業開始時にステータス更新、失敗時は元に戻す
 - エラー詳細をコメントで記録
 - 手動介入が必要な場合は `status:blocked` に設定
@@ -171,27 +172,15 @@ ISSUE #123:
 - `status:blocked` ラベルが付いたISSUE
 - `status:under-discussion` で議論が長期継続
 - CI/CD障害で自動修復不可能な問題
-- 最終的なPRマージ判断
+- 最終的なPRマージ判定
 
-## 📈 品質保証
-
-### 各段階での品質チェック
-- **Issue Improver**: 要件の明確性・実装可能性
-- **Implementer**: セキュリティ・パフォーマンス・テスト
-- **PR Reviewer**: 多角的品質評価・ベストプラクティス確認
-- **PR Responder**: 指摘事項の適切な修正
-
-### 自動化範囲と人間の役割
-- **自動化**: 実装・レビュー・修正・文書化
-- **人間**: 要件定義・最終判断・マージ・緊急対応
-
-## 🔧 システム監視
+## 📝 品質保証
 
 ### ヘルスチェック項目
 - 各プロンプトの実行成功率
 - ステータス遷移の正常性  
 - 滞留ISSUEの検出
-- 重複作業の発生有無
+- 重複処理の発生有無
 
 ### パフォーマンス指標
 - リードタイム: request → completed
@@ -199,23 +188,50 @@ ISSUE #123:
 - レビュー時間: pr-created → approved
 - 修正時間: changes-requested → fix-completed
 
-## 🎯 実行タイミングの柔軟性
+## 📈 実装タイミングの柔軟性
 
 各プロンプトは以下の特徴を持ちます：
 
 ### 独立性
 - 各プロンプトは独立して実行可能
-- 前回の実行状態に依存しない設計
-- ステータス駆動による適切な処理順序
+- 前回の実行状況に依存しない設計
+- ステータス変更による適切な処理スキップ
 
 ### 柔軟なスケジューリング
 - 任意のタイミングで実行可能
-- 負荷に応じた実行頻度調整
-- 緊急時の優先度制御
+- 負荷に応じた分散実行可能
+- 緊急時の優先処理対応
 
-### 重複安全性
+### 完全自動化
 - 同一作業の重複実行を自動回避
-- ステータス確認による安全な処理
-- エラー時の適切な状態復旧
+- ステータス確認による適切な処理スキップ
+- エラー時の適切な状況復旧
 
 これにより、人間の創造的作業に集中できる包括的で柔軟な開発自動化システムが実現されます。
+
+## 🔧 重要な改善点 [NEW]
+
+### ステータス遷移の明確化
+1. **再レビュー状態の分離**: `status:re-reviewing` を新設
+   - `fix-completed` → `re-reviewing` → `approved/changes-requested`
+   - 初回レビューと修正後レビューの区別
+
+2. **Worker排他制御の強化**
+   - 同一Issue/PRでの並行Worker実行防止
+   - `worker:*` ラベルによる処理中表示
+   - 処理完了時のworkerラベル除去
+
+3. **CI/CD統合の改善**
+   - CI/CD Monitor によるISSUE作成を既存フローに統合
+   - `priority:critical` + `worker:cicd-monitor` の組み合わせ
+   - 緊急度判定基準の統一
+
+### エラーハンドリング強化
+- 無限ループ防止機構
+- デッドロック検出と自動復旧
+- 異常状態の人間への通知
+
+### メトリクス収集
+- 各ステータスでの滞留時間
+- Worker別の処理時間
+- エラー発生率とパターン分析
