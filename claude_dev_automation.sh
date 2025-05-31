@@ -2,7 +2,7 @@
 
 # =============================================================================
 # Claude Code 統合開発自動化スクリプト
-# ISSUE作成・実装・PRレビュー・ISSUE改善を自動化
+# ISSUE作成・実装・PRレビュー・ISSUE改善・リクエスト処理を自動化
 # =============================================================================
 
 set -e  # エラー時に停止
@@ -16,7 +16,9 @@ DRY_RUN="${DRY_RUN:-false}"
 AUTO_IMPLEMENT="${AUTO_IMPLEMENT:-false}"
 AUTO_REVIEW="${AUTO_REVIEW:-true}"
 AUTO_IMPROVE_ISSUES="${AUTO_IMPROVE_ISSUES:-true}"
+PROCESS_REQUEST_ISSUES="${PROCESS_REQUEST_ISSUES:-true}"
 BRANCH_PREFIX="${BRANCH_PREFIX:-claude-auto}"
+REQUEST_LABEL="${REQUEST_LABEL:-request}"
 
 # ログ関数
 log() {
@@ -71,18 +73,352 @@ check_prerequisites() {
     log "前提条件チェック完了"
 }
 
-# 1. 既存ISSUEの改善
-improve_existing_issues() {
-    log "=== 既存ISSUE改善処理開始 ==="
+# 1. リクエストISSUEの処理とISSUE改善
+process_request_issues_and_improvements() {
+    log "=== リクエストISSUE処理・既存ISSUE改善開始 ==="
     
-    if [ "$AUTO_IMPROVE_ISSUES" != "true" ]; then
+    # リクエストISSUEの処理
+    if [ "$PROCESS_REQUEST_ISSUES" = "true" ]; then
+        process_request_issues
+    else
+        log "リクエストISSUE処理がスキップされました（PROCESS_REQUEST_ISSUES=false）"
+    fi
+    
+    # 既存ISSUEの改善
+    if [ "$AUTO_IMPROVE_ISSUES" = "true" ]; then
+        improve_existing_issues
+    else
         log "ISSUE改善がスキップされました（AUTO_IMPROVE_ISSUES=false）"
+    fi
+    
+    log "=== リクエストISSUE処理・既存ISSUE改善完了 ==="
+}
+
+# リクエストタグ付きISSUEの処理
+process_request_issues() {
+    log "=== リクエストISSUE処理開始 ==="
+    
+    # "request"ラベル付きのオープンISSUEを取得
+    local request_issues_json
+    request_issues_json=$(gh issue list --state open --label "$REQUEST_LABEL" --json number,title,body,labels,createdAt)
+    
+    local request_count
+    request_count=$(echo "$request_issues_json" | jq length)
+    
+    if [ "$request_count" -eq 0 ]; then
+        log "リクエストISSUEが見つかりませんでした"
         return 0
     fi
     
-    # 最近のオープンISSUEを取得
+    log "リクエストISSUE数: $request_count"
+    
+    # 各リクエストISSUEを処理
+    for i in $(seq 0 $((request_count - 1))); do
+        local issue
+        issue=$(echo "$request_issues_json" | jq -r ".[$i]")
+        
+        local number title body
+        number=$(echo "$issue" | jq -r '.number')
+        title=$(echo "$issue" | jq -r '.title')
+        body=$(echo "$issue" | jq -r '.body // ""')
+        
+        process_single_request_issue "$number" "$title" "$body"
+    done
+    
+    log "=== リクエストISSUE処理完了 ==="
+}
+
+# 単一リクエストISSUEの処理
+process_single_request_issue() {
+    local request_number="$1"
+    local request_title="$2"
+    local request_body="$3"
+    
+    log "リクエストISSUE #$request_number を処理中: $request_title"
+    
+    # CLAUDE.mdの内容を取得
+    local claude_md_content=""
+    if [ -f "CLAUDE.md" ]; then
+        claude_md_content=$(cat CLAUDE.md)
+        log "CLAUDE.mdを読み込みました"
+    else
+        log "WARNING: CLAUDE.mdが見つかりません"
+    fi
+    
+    # ISSUEテンプレートの内容を取得
+    local issue_template_content=""
+    local template_files=(".github/ISSUE_TEMPLATE.md" ".github/issue_template.md" ".github/ISSUE_TEMPLATE/bug_report.md" ".github/ISSUE_TEMPLATE/feature_request.md")
+    
+    for template_file in "${template_files[@]}"; do
+        if [ -f "$template_file" ]; then
+            issue_template_content=$(cat "$template_file")
+            log "ISSUEテンプレートを読み込みました: $template_file"
+            break
+        fi
+    done
+    
+    if [ -z "$issue_template_content" ]; then
+        log "WARNING: ISSUEテンプレートが見つかりません"
+    fi
+    
+    # Claude Codeで詳細なISSUEを作成
+    local detailed_prompt="人間が作成したリクエストISSUEを、プロジェクトの標準に従って詳細なISSUEに変換してください。
+
+リクエストISSUE:
+タイトル: $request_title
+内容: $request_body
+
+プロジェクト情報:
+CLAUDE.md内容:
+$claude_md_content
+
+ISSUEテンプレート:
+$issue_template_content
+
+以下の形式でJSON出力してください:
+{
+  \"should_create_detailed_issue\": true/false,
+  \"detailed_issues\": [
+    {
+      \"title\": \"詳細なISSUEタイトル\",
+      \"body\": \"テンプレートに従った詳細な説明（マークダウン形式）\",
+      \"labels\": [\"ラベル1\", \"ラベル2\"],
+      \"priority\": \"high|medium|low\",
+      \"type\": \"bug|feature|improvement|documentation\",
+      \"implementation_complexity\": \"simple|medium|complex\",
+      \"auto_implementable\": true/false,
+      \"related_to_request\": $request_number
+    }
+  ],
+  \"close_original_request\": true/false,
+  \"request_completion_comment\": \"リクエスト処理完了時のコメント\"
+}
+
+処理方針:
+1. リクエストの意図を理解し、技術的に詳細化
+2. ISSUEテンプレートの形式に従って構造化
+3. CLAUDE.mdの情報を考慮してプロジェクト固有の要件を反映
+4. 必要に応じて複数のISSUEに分割
+5. 実装可能性を評価してauto_implementableを判定
+6. 適切なラベルと優先度を設定
+
+単純すぎるリクエストや不明確なリクエストの場合はshould_create_detailed_issue: falseにしてください。"
+
+    local claude_output
+    claude_output=$(claude -p --output-format json "$detailed_prompt" 2>/dev/null)
+    
+    if [ $? -ne 0 ]; then
+        log "ERROR: Claude分析失敗 - リクエストISSUE #$request_number"
+        return 1
+    fi
+    
+    # JSON解析と詳細ISSUE作成
+    local should_create
+    should_create=$(echo "$claude_output" | jq -r '.response.should_create_detailed_issue // .should_create_detailed_issue // false')
+    
+    if [ "$should_create" = "true" ]; then
+        create_detailed_issues_from_request "$claude_output" "$request_number"
+        
+        # 元のリクエストISSUEにコメント・クローズ処理
+        finalize_request_issue "$claude_output" "$request_number"
+    else
+        log "リクエストISSUE #$request_number は詳細化不要と判定されました"
+        
+        # 不明確なリクエストに対するコメント
+        if [ "$DRY_RUN" != "true" ]; then
+            gh issue comment "$request_number" --body "このリクエストをより具体的な要件として詳細化できませんでした。以下の情報を追加していただけますか？
+
+- 具体的な要件や目標
+- 期待される動作
+- 現在の問題点
+- 受入条件
+
+情報が追加されましたら、再度処理いたします。"
+        fi
+    fi
+}
+
+# リクエストから詳細ISSUEを作成
+create_detailed_issues_from_request() {
+    local claude_output="$1"
+    local request_number="$2"
+    
+    local detailed_issues
+    detailed_issues=$(echo "$claude_output" | jq -r '.response.detailed_issues // .detailed_issues // []')
+    
+    if [ "$detailed_issues" = "null" ] || [ "$detailed_issues" = "[]" ]; then
+        log "WARNING: 詳細ISSUE データが見つかりませんでした"
+        return 1
+    fi
+    
+    local issue_count
+    issue_count=$(echo "$detailed_issues" | jq length)
+    log "リクエスト #$request_number から $issue_count 個の詳細ISSUEを作成します"
+    
+    # 作成されたISSUE番号を記録
+    local created_issues=()
+    
+    # 各詳細ISSUEを処理
+    for i in $(seq 0 $((issue_count - 1))); do
+        local issue
+        issue=$(echo "$detailed_issues" | jq -r ".[$i]")
+        
+        local title body labels priority type complexity auto_implementable
+        title=$(echo "$issue" | jq -r '.title // "Detailed Issue"')
+        body=$(echo "$issue" | jq -r '.body // "No description provided"')
+        labels=$(echo "$issue" | jq -r '.labels[]? // empty' | tr '\n' ',' | sed 's/,$//')
+        priority=$(echo "$issue" | jq -r '.priority // "medium"')
+        type=$(echo "$issue" | jq -r '.type // "improvement"')
+        complexity=$(echo "$issue" | jq -r '.implementation_complexity // "medium"')
+        auto_implementable=$(echo "$issue" | jq -r '.auto_implementable // false')
+        
+        # 詳細ISSUE作成
+        local detailed_issue_number
+        detailed_issue_number=$(create_detailed_github_issue "$title" "$body" "$labels" "$priority" "$type" "$complexity" "$request_number")
+        
+        if [ -n "$detailed_issue_number" ] && [ "$detailed_issue_number" != "mock_issue_123" ]; then
+            created_issues+=("$detailed_issue_number")
+            
+            # 自動実装対象の場合はキューに追加
+            if [ "$auto_implementable" = "true" ] && [ "$AUTO_IMPLEMENT" = "true" ]; then
+                echo "$detailed_issue_number" >> "/tmp/claude_implement_queue.txt"
+            fi
+        fi
+    done
+    
+    # 作成されたISSUE一覧をファイルに保存（後でリクエストISSUEにコメント用）
+    if [ ${#created_issues[@]} -gt 0 ]; then
+        printf "%s\n" "${created_issues[@]}" > "/tmp/claude_created_issues_${request_number}.txt"
+    fi
+}
+
+# 詳細GitHub ISSUE作成
+create_detailed_github_issue() {
+    local title="$1"
+    local body="$2"
+    local labels="$3"
+    local priority="$4"
+    local type="$5"
+    local complexity="$6"
+    local request_number="$7"
+    
+    log "詳細ISSUE作成準備: $title (リクエスト #$request_number から)"
+    
+    # ラベルの準備
+    local label_args=""
+    if [ -n "$labels" ]; then
+        IFS=',' read -ra LABEL_ARRAY <<< "$labels"
+        for label in "${LABEL_ARRAY[@]}"; do
+            label=$(echo "$label" | xargs)
+            if [ -n "$label" ]; then
+                label_args="$label_args --label \"$label\""
+            fi
+        done
+    fi
+    
+    # メタデータラベルを追加
+    label_args="$label_args --label \"priority:$priority\" --label \"type:$type\" --label \"complexity:$complexity\" --label \"from-request\""
+    
+    # ISSUE本文にメタデータとリクエスト参照を追加
+    local enhanced_body="$body
+
+---
+**リクエスト情報:**
+- 元リクエスト: #$request_number
+- 優先度: $priority
+- タイプ: $type  
+- 実装複雑度: $complexity
+- 作成日時: $(date '+%Y-%m-%d %H:%M:%S')
+- 生成者: Claude Code Auto Batch"
+
+    if [ "$DRY_RUN" = "true" ]; then
+        log "DRY RUN: 以下の詳細ISSUEを作成する予定です:"
+        log "  タイトル: $title"
+        log "  元リクエスト: #$request_number"
+        log "  ラベル: $labels, priority:$priority, type:$type"
+        echo "mock_issue_123"
+    else
+        # GitHub ISSUE作成
+        local create_command="gh issue create --title \"$title\" --body \"$enhanced_body\" $label_args"
+        
+        log "詳細ISSUE作成実行中: $title"
+        local issue_url
+        issue_url=$(eval "$create_command")
+        
+        if [ $? -eq 0 ]; then
+            local issue_number
+            issue_number=$(echo "$issue_url" | grep -o '[0-9]*$')
+            log "SUCCESS: 詳細ISSUE作成完了 - #$issue_number: $title (リクエスト #$request_number から)"
+            echo "$issue_number"
+        else
+            log "ERROR: 詳細ISSUE作成失敗 - $title"
+            echo ""
+        fi
+    fi
+}
+
+# リクエストISSUEの最終処理
+finalize_request_issue() {
+    local claude_output="$1"
+    local request_number="$2"
+    
+    local should_close
+    should_close=$(echo "$claude_output" | jq -r '.response.close_original_request // .close_original_request // false')
+    
+    local completion_comment
+    completion_comment=$(echo "$claude_output" | jq -r '.response.request_completion_comment // .request_completion_comment // ""')
+    
+    if [ "$DRY_RUN" = "true" ]; then
+        log "DRY RUN: リクエストISSUE #$request_number の最終処理"
+        log "  クローズ予定: $should_close"
+        return 0
+    fi
+    
+    # 作成された詳細ISSUEの一覧を取得
+    local created_issues_file="/tmp/claude_created_issues_${request_number}.txt"
+    local created_issues_list=""
+    
+    if [ -f "$created_issues_file" ]; then
+        created_issues_list=$(cat "$created_issues_file" | while read issue_num; do
+            echo "- #$issue_num"
+        done | tr '\n' '\n')
+        rm -f "$created_issues_file"
+    fi
+    
+    # 完了コメントを作成
+    local final_comment="## リクエスト処理完了
+
+このリクエストに基づいて以下の詳細ISSUEを作成しました:
+
+$created_issues_list
+
+$completion_comment
+
+---
+*このコメントはClaude Code Auto Batchによって自動生成されました*"
+
+    # コメント追加
+    gh issue comment "$request_number" --body "$final_comment"
+    log "SUCCESS: リクエストISSUE #$request_number にコメントを追加しました"
+    
+    # 必要に応じてクローズ
+    if [ "$should_close" = "true" ]; then
+        gh issue close "$request_number"
+        log "SUCCESS: リクエストISSUE #$request_number をクローズしました"
+    else
+        # "processed"ラベルを追加してクローズしない
+        gh issue edit "$request_number" --add-label "processed"
+        log "SUCCESS: リクエストISSUE #$request_number に'processed'ラベルを追加しました"
+    fi
+}
+
+# 既存ISSUEの改善（元の機能）
+improve_existing_issues() {
+    log "--- 既存ISSUE改善処理開始 ---"
+    
+    # "request"と"from-request"以外のオープンISSUEを取得
     local issues_json
-    issues_json=$(gh issue list --state open --limit 20 --json number,title,body,labels)
+    issues_json=$(gh issue list --state open --limit 20 --json number,title,body,labels | jq '[.[] | select(.labels | map(.name) | contains(["request", "from-request"]) | not)]')
     
     local issue_count
     issue_count=$(echo "$issues_json" | jq length)
@@ -107,7 +443,7 @@ improve_existing_issues() {
         improve_single_issue "$number" "$title" "$body"
     done
     
-    log "=== 既存ISSUE改善処理完了 ==="
+    log "--- 既存ISSUE改善処理完了 ---"
 }
 
 # 単一ISSUEの改善
@@ -656,6 +992,7 @@ main() {
     log "自動実装: $AUTO_IMPLEMENT"
     log "自動レビュー: $AUTO_REVIEW"
     log "ISSUE改善: $AUTO_IMPROVE_ISSUES"
+    log "リクエスト処理: $PROCESS_REQUEST_ISSUES"
     
     # 前提条件チェック
     check_prerequisites
@@ -664,7 +1001,7 @@ main() {
     cd "$PROJECT_PATH"
     
     # 処理実行
-    improve_existing_issues
+    process_request_issues_and_improvements
     create_new_issues
     implement_issues
     review_pull_requests
@@ -679,6 +1016,7 @@ show_help() {
 Claude Code 統合開発自動化スクリプト
 
 機能:
+  - リクエストISSUE処理（requestタグ付きISSUEの詳細化）
   - 既存ISSUEの改善
   - 新規ISSUE作成
   - ISSUE自動実装
@@ -701,6 +1039,8 @@ Claude Code 統合開発自動化スクリプト
     --no-auto-review       PR自動レビューを無効化
     --improve-issues       ISSUE改善を有効化
     --no-improve-issues    ISSUE改善を無効化
+    --process-requests     リクエストISSUE処理を有効化
+    --no-process-requests  リクエストISSUE処理を無効化
 
 環境変数:
     PROJECT_PATH           プロジェクトパス
@@ -710,6 +1050,8 @@ Claude Code 統合開発自動化スクリプト
     AUTO_IMPLEMENT        自動実装（true/false）
     AUTO_REVIEW           自動レビュー（true/false）
     AUTO_IMPROVE_ISSUES   ISSUE改善（true/false）
+    PROCESS_REQUEST_ISSUES リクエスト処理（true/false）
+    REQUEST_LABEL         リクエストラベル名（デフォルト: request）
     BRANCH_PREFIX         実装用ブランチのプレフィックス
 
 例:
@@ -717,13 +1059,13 @@ Claude Code 統合開発自動化スクリプト
     $0
     
     # フル自動化
-    $0 --auto-implement --auto-review --improve-issues
+    $0 --auto-implement --auto-review --improve-issues --process-requests
     
-    # レビューのみ
-    $0 --no-auto-implement --auto-review --no-improve-issues
+    # リクエスト処理のみ
+    $0 --no-auto-implement --no-auto-review --no-improve-issues --process-requests
     
     # ドライランで動作確認
-    $0 --dry-run --auto-implement
+    $0 --dry-run --process-requests
 EOF
 }
 
@@ -776,6 +1118,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --no-improve-issues)
             AUTO_IMPROVE_ISSUES=false
+            shift
+            ;;
+        --process-requests)
+            PROCESS_REQUEST_ISSUES=true
+            shift
+            ;;
+        --no-process-requests)
+            PROCESS_REQUEST_ISSUES=false
             shift
             ;;
         *)
