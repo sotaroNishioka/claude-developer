@@ -43,7 +43,7 @@ cd "$PROJECT_PATH" || {
 echo "=== Starting $PROMPT_NAME at $(date) ===" >> "$LOG_FILE"
 echo "PROJECT_PATH: $PROJECT_PATH" >> "$LOG_FILE"
 echo "LOG_DIR: $LOG_DIR" >> "$LOG_FILE"
-echo "ANTHROPIC_MODEL: $ANTHROPIC_MODEL" >> "$LOG_FILE"
+echo "CLAUDE_CMD: $CLAUDE_CMD" >> "$LOG_FILE"
 echo "=======================================" >> "$LOG_FILE"
 
 "$SCRIPT_DIR/automation.sh" "$PROMPT_NAME" >> "$LOG_FILE" 2>&1
