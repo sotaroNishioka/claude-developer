@@ -17,186 +17,74 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
 }
 
-# プロンプトテンプレート読み込み
-load_prompt() {
-    local template_name="$1"
-    local template_file="${PROMPTS_DIR}/${template_name}.txt"
+# プロンプト実行
+execute_prompt() {
+    local prompt_file="$1"
+    shift
     
-    if [ -f "$template_file" ]; then
-        cat "$template_file"
-    else
-        log "WARNING: プロンプトテンプレートが見つかりません: $template_file"
-        echo ""
-    fi
-}
-
-# プロジェクト分析してISSUE作成
-create_issues() {
-    log "=== ISSUE作成開始 ==="
-    
-    local prompt=$(load_prompt "issue_analysis")
-
-    local result=$(claude -p --output-format json "$prompt" 2>/dev/null)
-    
-    if [ $? -eq 0 ]; then
-        local issues=$(echo "$result" | jq -r '.response.issues // .issues // []')
-        local count=$(echo "$issues" | jq length)
-        
-        log "提案されたISSUE数: $count"
-        
-        for i in $(seq 0 $((count - 1))); do
-            local issue=$(echo "$issues" | jq -r ".[$i]")
-            local title=$(echo "$issue" | jq -r '.title')
-            local body=$(echo "$issue" | jq -r '.body')
-            local priority=$(echo "$issue" | jq -r '.priority')
-            
-            gh issue create --title "$title" --body "$body" --label "auto-generated,priority:$priority"
-            log "ISSUE作成完了 - $title"
-        done
-    else
-        log "ERROR: Claude分析失敗"
+    # ファイルが存在するか確認
+    if [ ! -f "$prompt_file" ]; then
+        # プロンプトディレクトリ内を探す
+        if [ -f "${PROMPTS_DIR}/${prompt_file}" ]; then
+            prompt_file="${PROMPTS_DIR}/${prompt_file}"
+        elif [ -f "${PROMPTS_DIR}/${prompt_file}.txt" ]; then
+            prompt_file="${PROMPTS_DIR}/${prompt_file}.txt"
+        else
+            log "ERROR: プロンプトファイルが見つかりません: $prompt_file"
+            exit 1
+        fi
     fi
     
-    log "=== ISSUE作成完了 ==="
-}
-
-# オープンPRをレビュー
-review_prs() {
-    log "=== PRレビュー開始 ==="
+    log "プロンプト実行: $prompt_file"
     
-    local prs=$(gh pr list --state open --limit 5 --json number,title | jq -r '.[].number')
+    # プロンプト読み込み
+    local prompt=$(cat "$prompt_file")
     
-    for pr in $prs; do
-        log "PR #$pr をレビュー中..."
-        
-        local prompt_template=$(load_prompt "pr_review")
-        local prompt=$(echo "$prompt_template" | sed "s/{{PR_NUMBER}}/$pr/g")
-        claude "$prompt"
-        log "PR #$pr レビュー完了"
+    # 引数による変数置換
+    local i=1
+    for arg in "$@"; do
+        prompt=$(echo "$prompt" | sed "s/{{ARG${i}}}/$arg/g")
+        i=$((i + 1))
     done
     
-    log "=== PRレビュー完了 ==="
-}
-
-# 単一ISSUEの実装
-implement_issue() {
-    local issue_number="$1"
-    
-    log "=== ISSUE #$issue_number 実装開始 ==="
-    
-    # ISSUE情報取得
-    local issue_data=$(gh issue view "$issue_number" --json title,body)
-    local title=$(echo "$issue_data" | jq -r '.title')
-    local body=$(echo "$issue_data" | jq -r '.body // ""')
-    
-    # ブランチ作成
-    local branch_name="fix/issue-${issue_number}"
-    
-    git checkout -b "$branch_name" 2>/dev/null || git checkout "$branch_name"
-    
-    # プロンプト生成
-    local prompt_template=$(load_prompt "implementation")
-    local prompt=$(echo "$prompt_template" | \
-        sed "s/{{ISSUE_NUMBER}}/$issue_number/g" | \
-        sed "s/{{ISSUE_TITLE}}/$title/g" | \
-        sed "s/{{ISSUE_BODY}}/$body/g")
-    
-    # 実装実行
+    # Claude実行
     claude "$prompt"
     
-    # 変更があればPR作成
-    if ! git diff --quiet; then
-        git push -u origin "$branch_name"
-        gh pr create --title "fix: implement #$issue_number - $title" \
-                    --body "Closes #$issue_number" \
-                    --base main
-        log "PR作成完了"
-    fi
-    
-    git checkout main
-    
-    log "=== ISSUE #$issue_number 実装完了 ==="
+    log "実行完了"
 }
 
 # メイン処理
 main() {
-    log "=== シンプル自動化開始 ==="
-    
     # 前提条件チェック
     if ! command -v claude &> /dev/null; then
-        log "ERROR: Claude Code CLIが見つかりません"
-        exit 1
-    fi
-    
-    if ! command -v gh &> /dev/null; then
-        log "ERROR: GitHub CLIが見つかりません"
+        echo "ERROR: Claude Code CLIが見つかりません"
         exit 1
     fi
     
     cd "$PROJECT_PATH"
     
-    # 処理実行
-    case "${1:-help}" in
-        issues)
-            create_issues
-            ;;
-        review)
-            review_prs
-            ;;
-        implement)
-            if [ -n "$2" ]; then
-                implement_issue "$2"
-            else
-                echo "ERROR: ISSUE番号を指定してください"
-                exit 1
-            fi
-            ;;
-        run)
-            if [ -n "$2" ]; then
-                if [ -f "$2" ]; then
-                    log "プロンプトファイル実行: $2"
-                    local prompt=$(cat "$2")
-                    claude "$prompt"
-                    log "実行完了"
-                else
-                    echo "ERROR: ファイルが見つかりません: $2"
-                    exit 1
-                fi
-            else
-                echo "ERROR: プロンプトファイルを指定してください"
-                exit 1
-            fi
-            ;;
-        all)
-            create_issues
-            review_prs
-            ;;
-        help|*)
-            cat << EOF
-使用方法: $0 [コマンド] [オプション]
+    # 引数チェック
+    if [ $# -eq 0 ]; then
+        cat << EOF
+使用方法: $0 <プロンプトファイル> [引数1] [引数2] ...
 
-コマンド:
-  issues              - プロジェクト分析とISSUE作成
-  review              - オープンPRのレビュー
-  implement <番号>    - 指定ISSUEの実装
-  run <ファイル>      - 指定したプロンプトファイルを実行
-  all                 - ISSUE作成とレビューを実行
-
-環境変数:
-  PROJECT_PATH        - プロジェクトパス (デフォルト: カレントディレクトリ)
-  PROMPTS_DIR        - プロンプトテンプレートのディレクトリ
+プロンプトファイルを指定してClaude Codeを実行します。
 
 例:
-  $0 issues                    # ISSUE作成のみ
-  $0 review                    # PRレビューのみ
-  $0 implement 123             # ISSUE #123を実装
-  $0 run my_prompt.txt         # カスタムプロンプトを実行
+  $0 issue_analysis              # issue_analysis.txtを実行
+  $0 pr_review 123               # pr_review.txtを実行（{{ARG1}}を123に置換）
+  $0 implementation 456          # implementation.txtを実行（{{ARG1}}を456に置換）
+  $0 my_prompt.txt               # カスタムプロンプトを実行
+  $0 custom.txt param1 param2    # {{ARG1}}, {{ARG2}}を置換して実行
+
+環境変数:
+  PROJECT_PATH   - プロジェクトパス (デフォルト: カレントディレクトリ)
+  PROMPTS_DIR    - プロンプトディレクトリ (デフォルト: ./prompts)
 EOF
-            exit 0
-            ;;
-    esac
+        exit 0
+    fi
     
-    log "=== シンプル自動化完了 ==="
+    execute_prompt "$@"
 }
 
 main "$@"

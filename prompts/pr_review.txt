@@ -1,4 +1,4 @@
-PR #{{PR_NUMBER}} をレビューしてください。
+PR #{{ARG1}} をレビューしてください。
 
 レビュー観点：
 1. コードの品質
@@ -23,6 +23,13 @@ PR #{{PR_NUMBER}} をレビューしてください。
 5. ドキュメント
    - コメントの適切さ
    - READMEやドキュメントの更新
+
+以下の手順で実行してください：
+1. gh pr view {{ARG1}} でPRの詳細を確認
+2. gh pr diff {{ARG1}} で変更内容を確認
+3. 各ファイルの変更を詳細にレビュー
+4. 必要に応じてgh pr review {{ARG1}} --comment でコメントを追加
+5. 最終的にgh pr review {{ARG1}} --approve/--request-changes で判定
 
 重大な問題がある場合は詳細なコメントを付けて Request Changes を、
 軽微な改善提案のみの場合は Approve with comments を、

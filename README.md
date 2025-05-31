@@ -1,66 +1,82 @@
 # シンプルな Claude Code 自動化ツール
 
-自分のプロジェクトで Claude Code を使った自動化処理を簡単に実行するためのシンプルなツールです。
+プロンプトテンプレートを使って Claude Code を実行するシンプルなツールです。
 
-## 機能
+## 概要
 
-- **ISSUE 作成**: プロジェクトを分析して改善提案を ISSUE として作成
-- **PR レビュー**: オープンな PR を自動でレビュー
-- **ISSUE 実装**: 指定した ISSUE を自動で実装して PR 作成
-- **カスタムプロンプト実行**: 任意のプロンプトファイルを実行
+このツールは、テキストファイルに記述したプロンプトを Claude Code で実行します。プロンプト内の変数を引数で置換できるため、様々な自動化タスクに活用できます。
 
 ## セットアップ
-
-1. スクリプトに実行権限を付与
 
 ```bash
 chmod +x automation.sh
 ```
 
-2. 設定ファイルを編集（オプション）
-
-```bash
-cp config.env config.env
-# config.envを編集
-```
-
 ## 使い方
 
-### 基本的な使用方法
-
 ```bash
-# ISSUE作成
-./automation.sh issues
-
-# PRレビュー
-./automation.sh review
-
-# ISSUE実装
-./automation.sh implement 123
-
-# カスタムプロンプト実行
-./automation.sh run my_prompt.txt
+./automation.sh <プロンプトファイル> [引数1] [引数2] ...
 ```
 
-### プロンプトのカスタマイズ
+### 例
 
-`prompts/`ディレクトリ内のテキストファイルを編集することで、プロンプトをカスタマイズできます：
+```bash
+# プロジェクト分析とISSUE作成
+./automation.sh issue_analysis
 
-- `issue_analysis.txt` - ISSUE 作成時のプロンプト
-- `pr_review.txt` - PR レビュー時のプロンプト
-- `implementation.txt` - ISSUE 実装時のプロンプト
+# PR #123 をレビュー
+./automation.sh pr_review 123
 
-### Cron での自動実行
+# ISSUE #456 を実装
+./automation.sh implementation 456
+
+# カスタムプロンプトを実行
+./automation.sh my_prompt.txt
+
+# 複数の引数を渡す
+./automation.sh custom.txt param1 param2
+```
+
+## プロンプトテンプレート
+
+### デフォルトテンプレート
+
+`prompts/`ディレクトリに以下のテンプレートが含まれています：
+
+- `issue_analysis.txt` - プロジェクト分析と ISSUE 作成
+- `pr_review.txt` - プルリクエストのレビュー（{{ARG1}} = PR番号）
+- `implementation.txt` - ISSUE の実装（{{ARG1}} = ISSUE番号）
+- `custom_example.txt` - カスタムプロンプトの例
+
+### 変数の置換
+
+プロンプト内で `{{ARG1}}`, `{{ARG2}}` などの変数を使用でき、実行時の引数で置換されます：
+
+```bash
+# pr_review.txt 内の {{ARG1}} が 123 に置換される
+./automation.sh pr_review 123
+```
+
+### カスタムプロンプトの作成
+
+新しいプロンプトファイルを作成して、任意のタスクを自動化できます：
+
+```bash
+echo "プロジェクトのテストを実行してレポートを生成してください" > prompts/run_tests.txt
+./automation.sh run_tests
+```
+
+## Cron での自動実行
 
 ```bash
 # cron設定例を表示
 ./cron_examples.sh
 
-# 例: 毎時15分にレビューを実行
-15 * * * * cd /path/to/project && ./automation.sh review >> ./claude.log 2>&1
+# 例: 毎日朝9時にプロジェクト分析
+0 9 * * * cd /path/to/project && ./automation.sh issue_analysis >> ./claude.log 2>&1
 
-# 例: 毎時30分に実装を実行
-30 * * * * cd /path/to/project && ./automation.sh implement 123 >> ./claude.log 2>&1
+# 例: 毎時プロンプトを実行
+0 * * * * cd /path/to/project && ./automation.sh my_hourly_task >> ./claude.log 2>&1
 ```
 
 ## 環境変数
