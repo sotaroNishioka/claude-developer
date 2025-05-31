@@ -11,7 +11,7 @@ echo ""
 
 # スクリプトのパスを取得
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPT_PATH="$SCRIPT_DIR/simple_automation.sh"
+SCRIPT_PATH="$SCRIPT_DIR/automation.sh"
 
 echo "# === 基本的な設定例 ==="
 echo ""
