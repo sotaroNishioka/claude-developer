@@ -71,11 +71,52 @@ echo "プロジェクトのテストを実行してレポートを生成して�
 0 * * * * cd /path/to/project && ./automation.sh my_hourly_task >> ./claude_developer.log 2>&1
 ```
 
-## 環境変数
+## 環境変数設定
+
+環境変数を使用してスクリプトの動作をカスタマイズできます。
+
+### 設定方法
+
+1. サンプルファイルをコピーして設定ファイルを作成：
+
+```bash
+cp .env.sample .env
+```
+
+2. `.env`ファイルを編集して値を設定
+
+3. 環境変数を読み込んで実行：
+
+```bash
+# 環境変数を読み込んで実行
+source .env && ./automation.sh issue_creater
+
+# または一時的に設定して実行
+LOG_DIR=/custom/log/path ./automation.sh issue_creater
+```
+
+### 利用可能な環境変数
 
 - `PROJECT_PATH` - プロジェクトパス（デフォルト: カレントディレクトリ）
-- `LOG_FILE` - ログファイルパス（デフォルト: ./claude_developer.log）
+- `LOG_DIR` - ログ出力ディレクトリ（デフォルト: ./logs）
 - `PROMPTS_DIR` - プロンプトディレクトリ（デフォルト: ./prompts）
+- `ANTHROPIC_API_KEY` - Anthropic APIキー
+- `ANTHROPIC_MODEL` - 使用するClaudeモデル
+
+### ログファイル
+
+実行ごとに以下のログファイルが生成されます：
+
+- `{プロンプト名}_{タイムスタンプ}.log` - Claude Codeの実行ログ
+- `system_{タイムスタンプ}.log` - システムメッセージログ
+
+例：
+```
+logs/
+├── issue_creater_20240531_143022.log
+├── system_20240531_143020.log
+└── system_20240531_143025.log
+```
 
 ## 必要な環境
 

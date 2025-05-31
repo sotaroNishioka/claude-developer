@@ -8,13 +8,18 @@ set -e
 
 # 設定
 PROJECT_PATH="${PROJECT_PATH:-$(pwd)}"
-LOG_FILE="${LOG_FILE:-./claude_developer.log}"
+LOG_DIR="${LOG_DIR:-$SCRIPT_DIR/logs}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROMPTS_DIR="${PROMPTS_DIR:-$SCRIPT_DIR/prompts}"
 
+# ログディレクトリ作成
+mkdir -p "$LOG_DIR"
+
 # ログ関数
 log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+    local timestamp=$(date '+%Y%m%d_%H%M%S')
+    local system_log_file="${LOG_DIR}/system_${timestamp}.log"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$system_log_file"
 }
 
 # プロンプト実行
@@ -30,12 +35,18 @@ execute_prompt() {
         elif [ -f "${PROMPTS_DIR}/${prompt_file}.txt" ]; then
             prompt_file="${PROMPTS_DIR}/${prompt_file}.txt"
         else
-            log "ERROR: プロンプトファイルが見つかりません: $prompt_file"
+            log "ERROR: プロンプトファイルが見つかりません: ${PROMPTS_DIR}/${prompt_file}"
             exit 1
         fi
     fi
     
+    # ログファイル名生成（プロンプトファイル名 + タイムスタンプ）
+    local prompt_name=$(basename "$prompt_file" .txt)
+    local timestamp=$(date '+%Y%m%d_%H%M%S')
+    local main_log_file="${LOG_DIR}/${prompt_name}_${timestamp}.log"
+    
     log "プロンプト実行: $prompt_file"
+    log "ログファイル: $main_log_file"
     
     # プロンプト読み込み
     local prompt=$(cat "$prompt_file")
@@ -47,8 +58,8 @@ execute_prompt() {
         i=$((i + 1))
     done
     
-    # Claude実行
-    claude --dangerously-skip-permissions "$prompt"
+    # Claude実行（詳細ログ出力付き）
+    claude --dangerously-skip-permissions "$prompt" 2>&1 | tee "$main_log_file"
     
     log "実行完了"
 }
@@ -80,6 +91,7 @@ main() {
 環境変数:
   PROJECT_PATH   - プロジェクトパス (デフォルト: カレントディレクトリ)
   PROMPTS_DIR    - プロンプトディレクトリ (デフォルト: ./prompts)
+  LOG_DIR        - ログ出力ディレクトリ (デフォルト: ./logs)
 EOF
         exit 0
     fi
