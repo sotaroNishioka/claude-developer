@@ -41,9 +41,19 @@ cd "$PROJECT_PATH" || {
 
 # automation.shを実行
 echo "=== Starting $PROMPT_NAME at $(date) ===" >> "$LOG_FILE"
+echo "Environment Configuration:" >> "$LOG_FILE"
 echo "PROJECT_PATH: $PROJECT_PATH" >> "$LOG_FILE"
 echo "LOG_DIR: $LOG_DIR" >> "$LOG_FILE"
+echo "PROMPTS_DIR: $PROMPTS_DIR" >> "$LOG_FILE"
 echo "CLAUDE_CMD: $CLAUDE_CMD" >> "$LOG_FILE"
+if [ -n "$ANTHROPIC_API_KEY" ]; then
+    echo "ANTHROPIC_API_KEY: [SET]" >> "$LOG_FILE"
+else
+    echo "ANTHROPIC_API_KEY: [NOT SET]" >> "$LOG_FILE"
+fi
+if [ -n "$ANTHROPIC_MODEL" ]; then
+    echo "ANTHROPIC_MODEL: $ANTHROPIC_MODEL" >> "$LOG_FILE"
+fi
 echo "=======================================" >> "$LOG_FILE"
 
 "$SCRIPT_DIR/automation.sh" "$PROMPT_NAME" >> "$LOG_FILE" 2>&1
