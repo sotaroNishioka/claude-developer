@@ -70,7 +70,7 @@ execute_prompt() {
     
     # Claude実行（非対話的モード）
     # 最初に権限承認が必要な場合があります（手動で一度実行：claude --dangerously-skip-permissions）
-    if ! "$CLAUDE_CMD" --output-format stream-json --print --dangerously-skip-permissions "$prompt" 2>&1 | tee "$main_log_file"; then
+    if ! "$CLAUDE_CMD" --output-format stream-json --print --dangerously-skip-permissions --verbose "$prompt" 2>&1 | tee "$main_log_file"; then
         log "ERROR: 権限エラーが発生しました。手動で以下を実行してください："
         log "claude --dangerously-skip-permissions"
         log "その後、承認を選択してからcronを再設定してください。"
