@@ -29,7 +29,7 @@ claude:approved          # レビュー済みマージ可能
 ```
 🤖 **ClaudeCode ステータス更新**
 **タイムスタンプ**: [YYYY-MM-DD HH:mm:ss UTC]
-**ステータス**: `claude:ready` → `claude:in-progress`
+**ステータス**: `request` → `ready`
 **アクション**: ISSUEを分析し、実装準備が完了しました
 **優先度**: [critical|high|medium|low]
 **種別**: [bug|feature|enhancement|documentation|task]
@@ -49,7 +49,7 @@ claude:approved          # レビュー済みマージ可能
 **必須アクション**: 対象ISSUEを分析し、実装準備を完了してください
 
 1. **対象ISSUE検索**
-   - claude:requestとラベルの付与されたISSUEの検索
+   - claude:requestとラベルの付与されたISSUEの検索（最大3件を取得）
    - 重複したISSUEが無いか探索。重複がある場合はどちらかのISSUEをClose
 
 2. **ISSUE分析・改善**
@@ -63,7 +63,7 @@ claude:approved          # レビュー済みマージ可能
 
 4. **ステータス更新**
    - `claude:ready` ラベル設定
-   - ISSUE更新コメント投稿
+   - **ISSUE更新時**の内容でISSUEにコメントを追加
 
 ### 優先度判定基準：
 - **critical**: セキュリティ問題、本番障害
