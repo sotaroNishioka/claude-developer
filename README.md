@@ -37,8 +37,10 @@ chmod +x automation.sh
 
 `prompts/` ディレクトリに以下のテンプレートが含まれています：
 
-- `issue_creator.txt` - プロジェクト分析と ISSUE 作成
-- `custom_example.txt` - カスタムプロンプトの例
+- `issue_processor.txt` - ISSUE分析・改善・準備（統合）
+- `implementer.txt` - 実装・PR作成
+- `pr_processor.txt` - PRレビュー・修正対応（統合）
+- `monitor.txt` - CI/CD・コード品質・テスト・ドキュメント監視（統合）
 
 ### 変数の縛り方
 
@@ -128,72 +130,68 @@ logs/
 
 ## 📋 プロンプトワークフロー図
 
-### 全体ワークフロー
+### 全体ワークフロー（簡略化版）
 
 ```mermaid
 graph TD
     %% 人間からの入力
     HumanRequest[👤 Human Request] --> RequestIssue[📝 Request Issue]
-    NewIssue[🆕 New Issue] --> IssueTriager
+    NewIssue[🆕 New Issue] --> IssueProcessor
 
-    %% Issue処理フロー  
-    RequestIssue --> IssueImprover[🔧 Issue Improver]
-    IssueTriager[🏷️ Issue Triager] --> |status:ready| Implementer[⚡ Implementer]
-    IssueImprover --> |status:ready| Implementer
+    %% Issue処理フロー（統合）
+    RequestIssue --> IssueProcessor[🔧 Issue Processor]
+    IssueProcessor --> |status:ready| Implementer[⚡ Implementer]
     
-    %% 実装・レビューサイクル
-    Implementer --> |status:pr-created| PRReviewer[👀 PR Reviewer]
-    PRReviewer --> |status:approved| Completed[✅ Completed]
-    PRReviewer --> |status:changes-requested| PRResponder[🔄 PR Responder]
-    PRResponder --> |status:re-reviewing| PRReviewer
+    %% 実装・レビューサイクル（統合）
+    Implementer --> |status:completed + PR作成| PRProcessor[🔄 PR Processor]
+    PRProcessor --> |pr:approved| Merged[✅ Merged]
     
-    %% CI/CD監視フロー
-    CICDFailure[🚨 CI/CD Failure] --> CICDMonitor[📊 CI/CD Monitor]
-    CICDMonitor --> |Emergency Issue| IssueTriager
+    %% 監視・分析フロー（統合）
+    Monitor[📊 Monitor] --> |改善Issue作成| IssueProcessor
     
-    %% 品質・分析支援フロー
-    QAStrategist[🧪 QA Strategist] --> |Test Issues| IssueTriager
-    CodebaseAnalyzer[🔍 Codebase Analyzer] --> |Improvement Issues| IssueTriager
-    DocumentationManager[📚 Documentation Manager] --> |Doc Issues| IssueTriager
+    %% 並行監視
+    CICDFailure[🚨 CI/CD] --> Monitor
+    CodeQuality[🔍 Code Quality] --> Monitor
+    TestQuality[🧪 Test Quality] --> Monitor
+    Documentation[📚 Documentation] --> Monitor
     
     %% スタイル設定
     classDef human fill:#e1f5fe,stroke:#01579b,stroke-width:2px,color:#000
     classDef primary fill:#f3e5f5,stroke:#4a148c,stroke-width:2px,color:#000
-    classDef support fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#000
     classDef monitor fill:#ffebee,stroke:#b71c1c,stroke-width:2px,color:#000
     classDef status fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px,color:#000
     
     class HumanRequest,RequestIssue,NewIssue human
-    class IssueTriager,IssueImprover,Implementer,PRReviewer,PRResponder primary
-    class QAStrategist,CodebaseAnalyzer,DocumentationManager support
-    class CICDMonitor,CICDFailure monitor
-    class Completed status
+    class IssueProcessor,Implementer,PRProcessor primary
+    class Monitor,CICDFailure,CodeQuality,TestQuality,Documentation monitor
+    class Merged status
 ```
 
-### ステータス遷移図
+### ステータス遷移図（簡略化版）
 
 ```mermaid
 stateDiagram-v2
     [*] --> request : 人間のリクエスト
-    request --> analyzing : Issue Improver開始
-    analyzing --> ready : 分析完了
-    ready --> implementing : Implementer開始
-    implementing --> pr_created : PR作成完了
-    pr_created --> reviewing : PR Reviewer開始
-    reviewing --> approved : レビュー承認
-    reviewing --> changes_requested : 修正要求
-    changes_requested --> fixing : PR Responder開始
-    fixing --> fix_completed : 修正完了
-    fix_completed --> re_reviewing : 再レビュー待ち
-    re_reviewing --> reviewing : 再レビュー開始
-    approved --> completed : マージ完了
-    completed --> [*]
+    request --> ready : Issue Processor処理完了
+    ready --> in_progress : Implementer開始
+    in_progress --> completed : 実装・PR作成完了
+    
+    state "PR独立管理" as PRFlow {
+        draft --> review_requested : レビュー依頼
+        review_requested --> approved : 承認
+        review_requested --> changes_requested : 修正要求
+        changes_requested --> review_requested : 修正後再依頼
+        approved --> merged : マージ完了
+    }
+    
+    completed --> PRFlow
+    PRFlow --> [*]
     
     note right of changes_requested : [MUST FIX]<br/>[SHOULD FIX]<br/>[CONSIDER]
-    note right of re_reviewing : 無限ループ防止<br/>明確な状態分離
+    note left of PRFlow : PRはISSUEと独立<br/>管理・複数PR対応可能
 ```
 
-### Worker排他制御とラベル管理
+### ラベル管理（簡略化版）
 
 ```mermaid
 graph LR
@@ -209,78 +207,71 @@ graph LR
         T2[type:feature]
         T3[type:enhancement]
         T4[type:documentation]
+        T5[type:task]
     end
     
-    subgraph "Worker Labels"
-        W1[worker:issue-triager]
-        W2[worker:issue-improver]
-        W3[worker:implementer]
-        W4[worker:pr-reviewer]
-        W5[worker:pr-responder]
-        W6[worker:cicd-monitor]
+    subgraph "ISSUE Status"
+        IS1[status:request]
+        IS2[status:ready]
+        IS3[status:in-progress]
+        IS4[status:completed]
     end
     
-    subgraph "Status Labels"
-        S1[status:request]
-        S2[status:analyzing]
-        S3[status:ready]
-        S4[status:implementing]
-        S5[status:pr-created]
-        S6[status:reviewing]
-        S7[status:approved]
-        S8[status:changes-requested]
-        S9[status:fixing]
-        S10[status:re-reviewing]
-        S11[status:completed]
+    subgraph "PR Status"
+        PS1[pr:draft]
+        PS2[pr:review-requested]
+        PS3[pr:changes-requested]
+        PS4[pr:approved]
     end
     
     classDef priority fill:#ffcdd2
     classDef type fill:#c8e6c9
-    classDef worker fill:#fff9c4
-    classDef status fill:#e1f5fe
+    classDef issue fill:#e1f5fe
+    classDef pr fill:#f3e5f5
     
     class P1,P2,P3,P4 priority
-    class T1,T2,T3,T4 type
-    class W1,W2,W3,W4,W5,W6 worker
-    class S1,S2,S3,S4,S5,S6,S7,S8,S9,S10,S11 status
+    class T1,T2,T3,T4,T5 type
+    class IS1,IS2,IS3,IS4 issue
+    class PS1,PS2,PS3,PS4 pr
 ```
 
 ## 🔧 ワークフロー整合性改善
 
-### プロンプトファイル詳細
+### プロンプトファイル詳細（簡略化版）
 
 | プロンプト | 役割 | 入力条件 | 出力ステータス |
 |-----------|-----|----------|---------------|
-| **Issue Triager** | 新規ISSUE分析・分類 | ラベル未設定ISSUE | `status:ready` |
-| **Issue Improver** | リクエストの詳細化 | `status:request` | `status:ready` |
-| **Implementer** | 実装とPR作成 | `status:ready` | `status:pr-created` |
-| **PR Reviewer** | PRレビュー実行 | `status:pr-created`<br/>`status:re-reviewing` | `status:approved`<br/>`status:changes-requested` |
-| **PR Responder** | レビュー修正対応 | `status:changes-requested` | `status:re-reviewing` |
-| **CI/CD Monitor** | CI/CD失敗監視 | ワークフロー失敗検出 | 緊急ISSUE作成 |
-| **QA Strategist** | テスト戦略分析 | 独立実行 | テスト改善ISSUE |
-| **Codebase Analyzer** | コード品質分析 | 独立実行 | 改善ISSUE作成 |
-| **Documentation Manager** | ドキュメント管理 | 独立実行 | ドキュメントISSUE |
+| **Issue Processor** | ISSUE分析・改善・準備（統合） | `status:request` または未ラベルISSUE | `status:ready` |
+| **Implementer** | 実装とPR作成 | `status:ready` | `status:completed` + PR作成 |
+| **PR Processor** | PRレビュー・修正対応（統合） | `pr:review-requested` | `pr:approved` または `pr:changes-requested` |
+| **Monitor** | 総合監視・分析（統合） | 独立実行 | 改善ISSUE作成 |
 
 ### 主要改善点
 
-#### 1. ステータス遷移の明確化
-- **新ステータス追加**: `status:re-reviewing` を新設
-- **無限ループ防止**: `fix-completed` → `re-reviewing` → `approved/changes-requested`
-- **状態分離**: 初回レビューと修正後レビューの明確な区別
+#### 1. プロンプト統合による大幅な簡略化
+- **9個→4個**: Issue Triager+Improver、PR Reviewer+Responder、CI/CD+Analyzer+QA+Doc統合
+- **処理の一本化**: 関連する処理を単一プロンプトで実行し、複雑な連携を排除
+- **競合リスク削減**: Worker数半減により並行処理の競合問題を大幅軽減
 
-#### 2. Worker排他制御の強化
-- **並行処理制御**: 同一Issue/PRでの複数Worker同時実行を防止
-- **処理中表示**: `worker:*` ラベルによる実行状況の明示
-- **適切な解放**: 処理完了時のworkerラベル自動除去
+#### 2. ISSUEとPRの完全分離
+- **独立したライフサイクル**: ISSUEは要求管理、PRは実装管理に特化
+- **PRラベル中心**: `pr:draft` → `pr:review-requested` → `pr:approved`
+- **複数PR対応**: 1つのISSUEに対して複数PRでも混乱しない管理
 
-#### 3. CI/CD統合の改善
-- **統合フロー**: CI/CD Monitor によるISSUE作成を既存ワークフローに統合
-- **統一ラベル**: `priority:critical` + `worker:cicd-monitor` の組み合わせ
-- **緊急度統一**: 全プロンプト間での緊急度判定基準統一
+#### 3. ステータス体系の大幅簡略化
+- **ISSUE**: `request` → `ready` → `in-progress` → `completed` (4ステータス)
+- **PR**: `draft` → `review-requested` → `changes-requested` → `approved` (4ステータス)
+- **直線的遷移**: 複雑な分岐や戻り処理を最小限に
 
-### エラーハンドリング強化
-- **デッドロック防止**: 異常状態の自動検出と復旧
-- **メトリクス収集**: 各ステータスでの滞留時間測定
-- **品質保証**: Worker別処理時間とエラー率の監視
+#### 4. 統合監視による効率化
+- **Monitor統合**: CI/CD監視、コード品質、テスト戦略、ドキュメント管理を一元化
+- **包括的分析**: プロジェクト全体を総合的に監視し、適切な改善ISSUEを作成
+- **重複排除**: 類似機能の統合により無駄な処理を削減
 
-これらの改善により、より堅牢で信頼性の高い自動化システムが実現されました。
+### 期待効果
+- **運用複雑性70%削減**: ステータス・Worker数の大幅減少
+- **処理時間短縮**: 統合処理による効率化
+- **保守性向上**: シンプルなワークフローで理解・修正が容易
+- **拡張性確保**: 基本構造はシンプル、必要に応じて機能追加可能
+
+これらの改善により、より理解しやすく、保守しやすい自動化システムが実現されました。

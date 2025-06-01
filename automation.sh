@@ -69,7 +69,7 @@ execute_prompt() {
     done
     
     # Claude実行（非対話的モード）
-    "$CLAUDE_CMD" --print --dangerously-skip-permissions "$prompt" 2>&1 | tee "$main_log_file"
+    "$CLAUDE_CMD" --output-format stream-json -p --dangerously-skip-permissions "$prompt" 2>&1 | tee "$main_log_file"
     
     log "実行完了"
 }
